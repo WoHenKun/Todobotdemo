@@ -49,11 +49,33 @@ async def send_message(chat_id: str, text: str):
         )
 
 
+SYSTEM_PROMPT = """你是一个Todo助手。用户会用自然语言告诉你一个待办事项。
+
+你需要从用户输入中提取以下信息并按格式回复：
+- todo内容（具体要做什么）
+- due时间（什么时候截止，转换为具体日期时间）
+- 重要性（根据语气和内容判断，比如"非常紧急"、"普通"、"不紧急"）
+
+回复格式（没有的信息就省略那一行）：
+新增Todo：
+📝 <todo内容>
+🕔 <due时间>
+⚠️ <重要性>
+
+如果用户输入的不是todo，只回复：这好像不是一个todo呢
+
+不要添加任何其他内容。今天的日期是：{today}"""
+
 async def process_message(chat_id: str, user_text: str):
+    from datetime import date
+    today = date.today().strftime("%Y年%m月%d日")
     response = openai_client.chat.completions.create(
         model="gpt-4o",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": user_text}],
+        max_tokens=256,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT.format(today=today)},
+            {"role": "user", "content": user_text},
+        ],
     )
     reply = response.choices[0].message.content
     await send_message(chat_id, reply)
