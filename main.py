@@ -38,6 +38,7 @@ async def send_message(chat_id: str, text: str):
 @app.post("/webhook")
 async def webhook(request: Request):
     body = await request.json()
+    print("BODY:", json.dumps(body, ensure_ascii=False))
 
     # Feishu URL verification handshake
     if body.get("type") == "url_verification":
@@ -45,6 +46,7 @@ async def webhook(request: Request):
 
     event = body.get("event", {})
     message = event.get("message", {})
+    print("MESSAGE:", json.dumps(message, ensure_ascii=False))
 
     if message.get("message_type") != "text":
         return JSONResponse({"status": "ignored"})
