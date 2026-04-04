@@ -1,7 +1,7 @@
 import os
 import json
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from openai import OpenAI
 
@@ -49,10 +49,19 @@ async def send_message(chat_id: str, text: str):
         )
 
 
+async def process_message(chat_id: str, user_text: str):
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": user_text}],
+    )
+    reply = response.choices[0].message.content
+    await send_message(chat_id, reply)
+
+
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
-    print("BODY:", json.dumps(body, ensure_ascii=False))
 
     # Feishu URL verification handshake
     if body.get("type") == "url_verification":
@@ -60,7 +69,6 @@ async def webhook(request: Request):
 
     event = body.get("event", {})
     message = event.get("message", {})
-    print("MESSAGE:", json.dumps(message, ensure_ascii=False))
 
     # Ignore messages sent by the bot itself
     sender = event.get("sender", {})
@@ -74,12 +82,6 @@ async def webhook(request: Request):
     user_text = json.loads(message["content"])["text"]
     chat_id = message["chat_id"]
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": user_text}],
-    )
-    reply = response.choices[0].message.content
-
-    await send_message(chat_id, reply)
+    # Return 200 immediately, process in background to avoid Feishu retry
+    background_tasks.add_task(process_message, chat_id, user_text)
     return JSONResponse({"status": "ok"})
