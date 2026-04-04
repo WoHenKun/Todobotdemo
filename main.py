@@ -3,10 +3,10 @@ import json
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import anthropic
+from openai import OpenAI
 
 app = FastAPI()
-claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 FEISHU_APP_ID = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
@@ -52,13 +52,12 @@ async def webhook(request: Request):
     user_text = json.loads(message["content"])["text"]
     chat_id = message["chat_id"]
 
-    # Call Claude
-    response = claude.messages.create(
-        model="claude-sonnet-4-6",
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
         max_tokens=1024,
         messages=[{"role": "user", "content": user_text}],
     )
-    reply = response.content[0].text
+    reply = response.choices[0].message.content
 
     await send_message(chat_id, reply)
     return JSONResponse({"status": "ok"})
