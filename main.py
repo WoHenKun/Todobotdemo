@@ -10,6 +10,20 @@ openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 FEISHU_APP_ID = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
+BOT_OPEN_ID = None
+
+
+@app.on_event("startup")
+async def startup():
+    global BOT_OPEN_ID
+    token = await get_tenant_token()
+    async with httpx.AsyncClient() as client:
+        res = await client.get(
+            "https://open.feishu.cn/open-apis/bot/v3/info",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        BOT_OPEN_ID = res.json().get("bot", {}).get("open_id")
+        print("BOT_OPEN_ID:", BOT_OPEN_ID)
 
 
 async def get_tenant_token() -> str:
@@ -48,9 +62,10 @@ async def webhook(request: Request):
     message = event.get("message", {})
     print("MESSAGE:", json.dumps(message, ensure_ascii=False))
 
-    # Ignore messages sent by the bot itself (user_id is null for bot messages)
+    # Ignore messages sent by the bot itself
     sender = event.get("sender", {})
-    if not sender.get("sender_id", {}).get("user_id"):
+    sender_open_id = sender.get("sender_id", {}).get("open_id")
+    if sender_open_id and sender_open_id == BOT_OPEN_ID:
         return JSONResponse({"status": "ignored"})
 
     if message.get("message_type") != "text":
