@@ -7,6 +7,8 @@ from openai import OpenAI
 
 app = FastAPI()
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+from collections import deque
+processed_events: deque[str] = deque(maxlen=10)
 
 FEISHU_APP_ID = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
@@ -88,6 +90,13 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
     # Feishu URL verification handshake
     if body.get("type") == "url_verification":
         return JSONResponse({"challenge": body["challenge"]})
+
+    # Deduplicate events - Feishu retries if no response within timeout
+    event_id = body.get("header", {}).get("event_id")
+    if event_id:
+        if event_id in processed_events:
+            return JSONResponse({"status": "duplicate"})
+        processed_events.append(event_id)
 
     event = body.get("event", {})
     message = event.get("message", {})
