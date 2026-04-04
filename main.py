@@ -48,9 +48,9 @@ async def webhook(request: Request):
     message = event.get("message", {})
     print("MESSAGE:", json.dumps(message, ensure_ascii=False))
 
-    # Ignore messages sent by the bot itself
+    # Ignore messages sent by the bot itself (user_id is null for bot messages)
     sender = event.get("sender", {})
-    if sender.get("sender_type") == "app":
+    if not sender.get("sender_id", {}).get("user_id"):
         return JSONResponse({"status": "ignored"})
 
     if message.get("message_type") != "text":
