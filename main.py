@@ -72,7 +72,7 @@ SYSTEM_PROMPT = """你是一个Todo助手。用户会用自然语言告诉你一
 async def process_message(chat_id: str, user_text: str, user_open_id: str = None):
     # Handle confirmation flow
     if chat_id in pending_todos:
-        if "✅" in user_text:
+        if user_text.strip() == "1":
             todo = pending_todos.pop(chat_id)
             supabase.table("todos").insert({
                 "name": todo["name"],
@@ -81,11 +81,11 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
                 "user_id": user_open_id,
             }).execute()
             await send_message(chat_id, "✅ Todo已录入！")
-        elif "❌" in user_text:
+        elif user_text.strip() == "2":
             pending_todos.pop(chat_id)
             await send_message(chat_id, "已取消。")
         else:
-            await send_message(chat_id, "请回复 ✅ 确认添加 或 ❌ 取消")
+            await send_message(chat_id, "请回复 1 确认添加 或 2 取消")
         return
 
     # Parse new todo
@@ -112,7 +112,7 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
         lines.append(f"🕔 {todo['due']}")
     if todo.get("importance"):
         lines.append(f"⚠️ {todo['importance']}")
-    lines.append("\n确认添加吗？\n✅ 确认  ❌ 取消")
+    lines.append("\n确认添加吗？\n1 确认  2 取消")
     await send_message(chat_id, "\n".join(lines))
 
 
