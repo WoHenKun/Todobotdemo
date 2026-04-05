@@ -4,9 +4,11 @@ import httpx
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from openai import OpenAI
+from supabase import create_client
 
 app = FastAPI()
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
 from collections import deque
 processed_events: deque[str] = deque(maxlen=10)
 # chat_id -> {"parsed": "formatted todo string"}
@@ -55,30 +57,31 @@ async def send_message(chat_id: str, text: str):
 
 SYSTEM_PROMPT = """你是一个Todo助手。用户会用自然语言告诉你一个待办事项。
 
-你需要从用户输入中提取以下信息并按格式回复：
-- todo内容（具体要做什么）
-- due时间（什么时候截止，转换为具体日期时间）
-- 重要性（根据语气和内容判断，比如"非常紧急"、"普通"、"不紧急"）
+从用户输入中提取信息，只返回如下JSON，不要有其他内容：
+{{
+  "is_todo": true,
+  "name": "todo的具体内容",
+  "due": "ISO8601格式时间，如2026-04-10T17:00:00，没有则为null",
+  "importance": "非常紧急/紧急/普通/不紧急，根据语气判断，没有则为null"
+}}
 
-回复格式（没有的信息就省略那一行）：
-新增Todo：
-📝 <todo内容>
-🕔 <due时间>
-⚠️ <重要性>
+如果不是todo，返回：{{"is_todo": false}}
 
-如果用户输入的不是todo，只回复：这好像不是一个todo呢
-
-不要添加任何其他内容。今天的日期是：{today}"""
+今天的日期是：{today}"""
 
 async def process_message(chat_id: str, user_text: str):
     # Handle confirmation flow
     if chat_id in pending_todos:
         if "✅" in user_text:
-            # TODO: save to database here
-            del pending_todos[chat_id]
+            todo = pending_todos.pop(chat_id)
+            supabase.table("todos").insert({
+                "name": todo["name"],
+                "due": todo.get("due"),
+                "importance": todo.get("importance"),
+            }).execute()
             await send_message(chat_id, "✅ Todo已录入！")
         elif "❌" in user_text:
-            del pending_todos[chat_id]
+            pending_todos.pop(chat_id)
             await send_message(chat_id, "已取消。")
         else:
             await send_message(chat_id, "请回复 ✅ 确认添加 或 ❌ 取消")
@@ -95,15 +98,21 @@ async def process_message(chat_id: str, user_text: str):
             {"role": "user", "content": user_text},
         ],
     )
-    parsed = response.choices[0].message.content
+    todo = json.loads(response.choices[0].message.content)
 
-    if "这好像不是一个todo呢" in parsed:
-        await send_message(chat_id, parsed)
+    if not todo.get("is_todo"):
+        await send_message(chat_id, "这好像不是一个todo呢")
         return
 
-    # Store pending and ask for confirmation
-    pending_todos[chat_id] = parsed
-    await send_message(chat_id, f"{parsed}\n\n确认添加吗？\n✅ 确认  ❌ 取消")
+    # Store parsed todo and ask for confirmation
+    pending_todos[chat_id] = todo
+    lines = ["新增Todo：", f"📝 {todo['name']}"]
+    if todo.get("due"):
+        lines.append(f"🕔 {todo['due']}")
+    if todo.get("importance"):
+        lines.append(f"⚠️ {todo['importance']}")
+    lines.append("\n确认添加吗？\n✅ 确认  ❌ 取消")
+    await send_message(chat_id, "\n".join(lines))
 
 
 @app.post("/webhook")
