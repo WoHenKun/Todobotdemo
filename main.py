@@ -69,7 +69,7 @@ SYSTEM_PROMPT = """你是一个Todo助手。用户会用自然语言告诉你一
 
 今天的日期是：{today}"""
 
-async def process_message(chat_id: str, user_text: str):
+async def process_message(chat_id: str, user_text: str, user_open_id: str = None):
     # Handle confirmation flow
     if chat_id in pending_todos:
         if "✅" in user_text:
@@ -78,6 +78,7 @@ async def process_message(chat_id: str, user_text: str):
                 "name": todo["name"],
                 "due": todo.get("due"),
                 "importance": todo.get("importance"),
+                "user_id": user_open_id,
             }).execute()
             await send_message(chat_id, "✅ Todo已录入！")
         elif "❌" in user_text:
@@ -144,7 +145,8 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
 
     user_text = json.loads(message["content"])["text"]
     chat_id = message["chat_id"]
+    user_open_id = sender.get("sender_id", {}).get("open_id")
 
     # Return 200 immediately, process in background to avoid Feishu retry
-    background_tasks.add_task(process_message, chat_id, user_text)
+    background_tasks.add_task(process_message, chat_id, user_text, user_open_id)
     return JSONResponse({"status": "ok"})
