@@ -116,6 +116,18 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
     await send_message(chat_id, "\n".join(lines))
 
 
+@app.get("/todos")
+async def get_todos(user_id: str):
+    result = supabase.table("todos").select("*").eq("user_id", user_id).execute()
+    return result.data
+
+
+@app.delete("/todos/{todo_id}")
+async def delete_todo(todo_id: str):
+    supabase.table("todos").delete().eq("id", todo_id).execute()
+    return JSONResponse({"status": "deleted"})
+
+
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
     body = await request.json()
