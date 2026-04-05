@@ -9,6 +9,8 @@ app = FastAPI()
 openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 from collections import deque
 processed_events: deque[str] = deque(maxlen=10)
+# chat_id -> {"parsed": "formatted todo string"}
+pending_todos: dict[str, str] = {}
 
 FEISHU_APP_ID = os.environ["FEISHU_APP_ID"]
 FEISHU_APP_SECRET = os.environ["FEISHU_APP_SECRET"]
@@ -69,6 +71,20 @@ SYSTEM_PROMPT = """你是一个Todo助手。用户会用自然语言告诉你一
 不要添加任何其他内容。今天的日期是：{today}"""
 
 async def process_message(chat_id: str, user_text: str):
+    # Handle confirmation flow
+    if chat_id in pending_todos:
+        if "✅" in user_text:
+            # TODO: save to database here
+            del pending_todos[chat_id]
+            await send_message(chat_id, "✅ Todo已录入！")
+        elif "❌" in user_text:
+            del pending_todos[chat_id]
+            await send_message(chat_id, "已取消。")
+        else:
+            await send_message(chat_id, "请回复 ✅ 确认添加 或 ❌ 取消")
+        return
+
+    # Parse new todo
     from datetime import date
     today = date.today().strftime("%Y年%m月%d日")
     response = openai_client.chat.completions.create(
@@ -79,8 +95,15 @@ async def process_message(chat_id: str, user_text: str):
             {"role": "user", "content": user_text},
         ],
     )
-    reply = response.choices[0].message.content
-    await send_message(chat_id, reply)
+    parsed = response.choices[0].message.content
+
+    if "这好像不是一个todo呢" in parsed:
+        await send_message(chat_id, parsed)
+        return
+
+    # Store pending and ask for confirmation
+    pending_todos[chat_id] = parsed
+    await send_message(chat_id, f"{parsed}\n\n确认添加吗？\n✅ 确认  ❌ 取消")
 
 
 @app.post("/webhook")
