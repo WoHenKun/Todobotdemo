@@ -192,7 +192,8 @@ async def create_todo(request: Request):
         "importance": todo.get("importance"),
         "user_id": user_id,
     }).execute()
-    return result.data[0]
+    row = result.data[0] if result.data else {"name": todo["name"], "due": todo.get("due"), "importance": todo.get("importance"), "user_id": user_id}
+    return {**row, "text": row.get("name")}
 
 
 @app.delete("/todos/{todo_id}")
