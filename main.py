@@ -105,9 +105,8 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
                 await send_message(chat_id, "Please link your Feishu account in the app first.")
                 return
             supabase.table("todos").insert({
-                "name": todo["name"],
+                "text": todo["name"],
                 "due": todo.get("due"),
-                "importance": todo.get("importance"),
                 "user_id": user_id,
             }).execute()
             await send_message(chat_id, "Todo saved!")
@@ -187,13 +186,11 @@ async def create_todo(request: Request):
         )
 
     result = supabase.table("todos").insert({
-        "name": todo["name"],
+        "text": todo["name"],
         "due": todo.get("due"),
-        "importance": todo.get("importance"),
         "user_id": user_id,
     }).execute()
-    row = result.data[0] if result.data else {"name": todo["name"], "due": todo.get("due"), "importance": todo.get("importance"), "user_id": user_id}
-    return {**row, "text": row.get("name")}
+    return result.data[0] if result.data else {"text": todo["name"], "due": todo.get("due"), "user_id": user_id}
 
 
 @app.delete("/todos/{todo_id}")
