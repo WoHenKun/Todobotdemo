@@ -70,6 +70,18 @@ async def send_message(chat_id: str, text: str):
         )
 
 
+def get_supabase_user_id(feishu_open_id: str) -> str | None:
+    result = (
+        supabase.table("user_identities")
+        .select("user_id")
+        .eq("provider", "feishu")
+        .eq("provider_uid", feishu_open_id)
+        .maybe_single()
+        .execute()
+    )
+    return result.data.get("user_id") if result.data else None
+
+
 def parse_todo(user_text: str) -> dict:
     today = date.today().strftime("%Y-%m-%d")
     response = openai_client.chat.completions.create(
@@ -88,11 +100,15 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
     if chat_id in pending_todos:
         if user_text.strip() == "1":
             todo = pending_todos.pop(chat_id)
+            user_id = get_supabase_user_id(user_open_id) if user_open_id else None
+            if not user_id:
+                await send_message(chat_id, "Please link your Feishu account in the app first.")
+                return
             supabase.table("todos").insert({
                 "name": todo["name"],
                 "due": todo.get("due"),
                 "importance": todo.get("importance"),
-                "user_id": user_open_id,
+                "user_id": user_id,
             }).execute()
             await send_message(chat_id, "Todo saved!")
         elif user_text.strip() == "2":
@@ -100,6 +116,10 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
             await send_message(chat_id, "Cancelled.")
         else:
             await send_message(chat_id, "Reply 1 to confirm or 2 to cancel.")
+        return
+
+    if not user_open_id or not get_supabase_user_id(user_open_id):
+        await send_message(chat_id, "Please link your Feishu account in the app first.")
         return
 
     todo = parse_todo(user_text)
