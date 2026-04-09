@@ -118,6 +118,34 @@ async def process_message(chat_id: str, user_text: str, user_open_id: str = None
     await send_message(chat_id, "\n".join(lines))
 
 
+@app.post("/auth/feishu")
+async def feishu_auth(request: Request):
+    body = await request.json()
+    code = body["code"]
+    redirect_uri = body["redirect_uri"]
+
+    token_resp = httpx.post(
+        "https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal",
+        json={"app_id": FEISHU_APP_ID, "app_secret": FEISHU_APP_SECRET},
+    )
+    app_access_token = token_resp.json()["app_access_token"]
+
+    user_resp = httpx.post(
+        "https://open.feishu.cn/open-apis/authen/v1/access_token",
+        headers={"Authorization": f"Bearer {app_access_token}"},
+        json={"grant_type": "authorization_code", "code": code},
+    )
+    data = user_resp.json()["data"]
+
+    return {
+        "open_id": data["open_id"],
+        "meta": {
+            "name": data.get("name"),
+            "avatar_url": data.get("avatar_url"),
+        },
+    }
+
+
 @app.get("/todos")
 async def get_todos(user_id: str):
     result = supabase.table("todos").select("*").eq("user_id", user_id).execute()
