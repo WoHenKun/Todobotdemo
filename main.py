@@ -124,10 +124,30 @@ async def get_todos(user_id: str):
 
 @app.post("/todos")
 async def create_todo(request: Request):
+    from datetime import date
     body = await request.json()
+    user_text = body.get("text", "")
+    user_id = body.get("user_id")
+
+    today = date.today().strftime("%Y年%m月%d日")
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        max_tokens=256,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT.format(today=today)},
+            {"role": "user", "content": user_text},
+        ],
+    )
+    todo = json.loads(response.choices[0].message.content)
+
+    if not todo.get("is_todo"):
+        return JSONResponse({"is_todo": False, "message": f"这好像不是一个todo：{user_text}"}, status_code=422)
+
     result = supabase.table("todos").insert({
-        "name": body.get("text"),
-        "user_id": body.get("user_id"),
+        "name": todo["name"],
+        "due": todo.get("due"),
+        "importance": todo.get("importance"),
+        "user_id": user_id,
     }).execute()
     return result.data[0]
 
