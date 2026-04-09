@@ -122,6 +122,16 @@ async def get_todos(user_id: str):
     return result.data
 
 
+@app.post("/todos")
+async def create_todo(request: Request):
+    body = await request.json()
+    result = supabase.table("todos").insert({
+        "name": body.get("text"),
+        "user_id": body.get("user_id"),
+    }).execute()
+    return result.data[0]
+
+
 @app.delete("/todos/{todo_id}")
 async def delete_todo(todo_id: str):
     supabase.table("todos").delete().eq("id", todo_id).execute()
