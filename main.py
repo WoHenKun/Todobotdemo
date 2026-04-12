@@ -23,13 +23,10 @@ SYSTEM_PROMPT = """You are a Todo assistant. The user will describe a task in na
 
 Extract the information and return ONLY the following JSON, no other content:
 {{
-  "is_todo": true,
   "name": "the specific task",
   "due": "ISO8601 datetime e.g. 2026-04-10T17:00:00, or null if not specified",
-  "importance": "very urgent / urgent / normal / low, inferred from tone, or null if unclear"
+  "category": "Work, Study, or Personal — pick the most appropriate one"
 }}
-
-If the input is not a todo, return: {{"is_todo": false}}
 
 Today's date is: {today}"""
 
@@ -179,18 +176,13 @@ async def create_todo(request: Request):
 
     todo = parse_todo(user_text)
 
-    if not todo.get("is_todo"):
-        return JSONResponse(
-            {"is_todo": False, "message": f"Not a todo: {user_text}"},
-            status_code=422,
-        )
-
     result = supabase.table("todos").insert({
         "text": todo["name"],
         "due": todo.get("due"),
+        "category": todo.get("category"),
         "user_id": user_id,
     }).execute()
-    return result.data[0] if result.data else {"text": todo["name"], "due": todo.get("due"), "user_id": user_id}
+    return result.data[0] if result.data else {"text": todo["name"], "due": todo.get("due"), "category": todo.get("category"), "user_id": user_id}
 
 
 @app.delete("/todos/{todo_id}")
